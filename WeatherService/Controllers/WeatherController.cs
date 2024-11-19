@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using WeatherStationService;
 
 [Route("api/weather")]
 [ApiController]
