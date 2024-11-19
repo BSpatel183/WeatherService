@@ -1,12 +1,33 @@
 using Newtonsoft.Json.Linq;
 using RestSharp;
+using System.Collections.Concurrent;
 
 public class WeatherService
 {
+    private readonly string[] _apiKeys;
+    private readonly int _maxRequestsPerHour;
+    private static readonly ConcurrentDictionary<string, (int Count, DateTime FirstRequestTime)> _requestCounts = new ConcurrentDictionary<string, (int, DateTime)>();
+    public WeatherService(IConfiguration configuration)
+    {
+        _apiKeys = configuration.GetSection("ApiKeys").Get<string[]>();
+        _maxRequestsPerHour = configuration.GetValue<int>("RateLimit:MaxRequestsPerHour");
+    }
     public async Task<string> GetWeatherAsync(string city, string country, string apiKey)
     {
         try
         {
+            // Check if the API key is valid
+            if (!_apiKeys.Contains(apiKey))
+            {
+                return "Invalid API Key.";
+            }
+
+            // Check if the rate limit has been exceeded
+            bool retryAfter = CanRequest(apiKey);
+            if (!retryAfter)
+            {
+                return "Rate limit exceeded.";
+            }
             // Call OpenWeatherMap API
             var client = new RestClient("https://api.openweathermap.org");
             var request = new RestRequest("data/2.5/weather")
@@ -35,5 +56,28 @@ public class WeatherService
             // Catch any other exceptions
             return $"An unexpected error occurred: {ex.Message}. Please try again later.";
         }
+    }
+
+    private bool CanRequest(string apiKey)
+    {
+        var now = DateTime.UtcNow;
+        // Get the current count and the first request time for this API key
+        var (count, firstRequestTime) = _requestCounts.GetOrAdd(apiKey, (0, now));
+
+        if (now.Subtract(firstRequestTime).TotalHours >= 1)
+        {
+            // Reset the count and first request time after an hour has passed
+            _requestCounts[apiKey] = (1, now);
+            return true;
+        }
+
+        if (count >= _maxRequestsPerHour)
+        {
+            return false;
+        }
+
+        // Increment the request count
+        _requestCounts[apiKey] = (count + 1, firstRequestTime);
+        return true;
     }
 }

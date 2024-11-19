@@ -18,11 +18,24 @@ public class WeatherController : ControllerBase
         {
             // Call the weather service to fetch the weather data
             var result = await _weatherService.GetWeatherAsync(city, country, apiKey);
+
+            // Check if the result contains a rate limit exceeded or invalid API key message
             if (result.Contains("Failed"))
             {
                 return StatusCode(500, result);
             }
-            return Ok(result);
+            else if (result.Contains("Invalid API Key."))
+            {
+                return BadRequest(result);
+            }
+            else if (result.Contains("Rate limit exceeded."))
+            {
+                return StatusCode(429, "Rate limit exceeded. You can retry later.");
+            }
+            else
+            {
+                return Ok(result);
+            }
         }
         catch (Exception ex)
         {
