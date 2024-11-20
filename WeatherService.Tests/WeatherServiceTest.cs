@@ -1,11 +1,10 @@
 using Xunit;
 using Microsoft.Extensions.Configuration;
-using WeatherStationService;
 using System.Threading.Tasks;
 
 public class WeatherServiceTests
 {
-    private readonly WeatherService _weatherService;
+    private readonly WeatherStationService.WeatherService _weatherService;
 
     public WeatherServiceTests()
     {
@@ -16,7 +15,7 @@ public class WeatherServiceTests
             .Build();
 
         // Instantiate WeatherService with the actual configuration
-        _weatherService = new WeatherService(configuration);
+        _weatherService = new WeatherStationService.WeatherService(configuration);
     }
 
     [Fact]
@@ -26,7 +25,7 @@ public class WeatherServiceTests
         var result = await _weatherService.GetWeatherAsync("New York", "US", "invalid-key");
 
         // Assert
-        Assert.Equal("Invalid API Key.", result);
+        Assert.Equal("Invalid API Key.", result.Description);
     }
 
     [Fact]
@@ -45,7 +44,7 @@ public class WeatherServiceTests
         var result = await _weatherService.GetWeatherAsync("New York", "US", validKey);
 
         // Assert
-        Assert.Equal("Rate limit exceeded.", result);
+        Assert.Contains("Rate limit exceeded.", result.Description);
     }
 
     [Fact]
@@ -59,8 +58,8 @@ public class WeatherServiceTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.NotEqual("Invalid API Key.", result);
-        Assert.NotEqual("Rate limit exceeded.", result);
+        Assert.NotEqual("Invalid API Key.", result.Description);
+        Assert.NotEqual("Rate limit exceeded.", result.Description);
     }
 
     [Fact]
@@ -73,6 +72,6 @@ public class WeatherServiceTests
         var result = await _weatherService.GetWeatherAsync("InvalidCity", "InvalidCountry", validKey);
 
         // Assert
-        Assert.Equal("Failed to fetch weather data.", result);
+        Assert.Equal("Failed : city not found", result.Description);
     }
 }

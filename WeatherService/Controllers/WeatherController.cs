@@ -1,13 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
-using WeatherStationService;
 
 [Route("api/weather")]
 [ApiController]
 public class WeatherController : ControllerBase
 {
-    private readonly WeatherService _weatherService;
+    private readonly WeatherStationService.WeatherService _weatherService;
 
-    public WeatherController(WeatherService weatherService)
+    public WeatherController(WeatherStationService.WeatherService weatherService)
     {
         _weatherService = weatherService;
     }
@@ -21,17 +20,17 @@ public class WeatherController : ControllerBase
             var result = await _weatherService.GetWeatherAsync(city, country, apiKey);
 
             // Check if the result contains a rate limit exceeded or invalid API key message
-            if (result.Contains("Failed"))
+            if (result.Description.Contains("Failed"))
             {
-                return StatusCode(500, result);
+                return StatusCode(500, result.Description);
             }
-            else if (result.Contains("Invalid API Key."))
+            else if (result.Description.Contains("Invalid API Key."))
             {
-                return BadRequest(result);
+                return BadRequest(result.Description);
             }
-            else if (result.Contains("Rate limit exceeded."))
+            else if (result.Description.Contains("Rate limit exceeded."))
             {
-                return StatusCode(429, result);
+                return StatusCode(429, result.Description);
             }
             else
             {

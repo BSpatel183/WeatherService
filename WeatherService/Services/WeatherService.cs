@@ -1,6 +1,7 @@
 using Newtonsoft.Json.Linq;
 using RestSharp;
 using System.Collections.Concurrent;
+using WeatherService.Models;
 
 namespace WeatherStationService
 {
@@ -14,49 +15,62 @@ namespace WeatherStationService
             _apiKeys = configuration.GetSection("ApiKeys").Get<string[]>();
             _maxRequestsPerHour = configuration.GetValue<int>("RateLimit:MaxRequestsPerHour");
         }
-        public async Task<string> GetWeatherAsync(string city, string country, string apiKey)
+        public async Task<GetWeatherResponse> GetWeatherAsync(string city, string country, string apiKey)
         {
+            var weather_response = new GetWeatherResponse();
             try
             {
                 // Check if the API key is valid
                 if (!_apiKeys.Contains(apiKey))
                 {
-                    return "Invalid API Key.";
+                    weather_response.Description = "Invalid API Key.";
+                    return weather_response;
                 }
 
                 // Check if the rate limit has been exceeded
                 DateTime? retryAfter = CanRequest(apiKey);
                 if (retryAfter != null)
                 {
-                    return $"Rate limit exceeded. You can retry after {retryAfter} UTC.";
+                    weather_response.Description = $"Rate limit exceeded. You can retry after {retryAfter} UTC.";
+                    return weather_response;
                 }
-                    // Call OpenWeatherMap API
-                    var client = new RestClient("https://api.openweathermap.org");
+                // Call OpenWeatherMap API
+                var client = new RestClient("https://api.openweathermap.org");
                 var request = new RestRequest("data/2.5/weather")
                     .AddParameter("q", $"{city},{country}")
                     .AddParameter("appid", "8b7535b42fe1c551f18028f64e8688f7");  // OpenWeatherMap API key
 
                 var response = await client.ExecuteGetAsync(request);
+                Console.WriteLine(DateTime.UtcNow);
+                var json = JObject.Parse(response.Content);
 
                 if (response.IsSuccessful)
                 {
-                    Console.WriteLine(DateTime.UtcNow);
-                    var json = JObject.Parse(response.Content);
                     var description = json.SelectToken("weather[0].description")?.ToString();
-                    return description ?? "No weather description available.";
+                    var iconID = json.SelectToken("weather[0].icon")?.ToString();
+                    weather_response.IconId = iconID;
+                    weather_response.Description = $"{description}" ?? "No weather description available.";
+                    return weather_response;
+                }
+                else 
+                {
+                    var ErrorMessage = json.SelectToken("message")?.ToString();
+                    weather_response.Description = $"Failed : {ErrorMessage}" ?? "Failed to fetch weather data.";
+                    return weather_response ;
                 }
 
-                return "Failed to fetch weather data.";
             }
             catch (Newtonsoft.Json.JsonReaderException ex)
             {
                 // Handle JSON parsing errors (e.g., if OpenWeatherMap returns malformed JSON)
-                return $"Error parsing the weather data: {ex.Message}. Please try again later.";
+                weather_response.Description = $"Error parsing the weather data: {ex.Message}. Please try again later.";
+                return weather_response;
             }
             catch (Exception ex)
             {
                 // Catch any other exceptions
-                return $"An unexpected error occurred: {ex.Message}. Please try again later.";
+                weather_response.Description = $"An unexpected error occurred: {ex.Message}. Please try again later.";
+                return weather_response;
             }
         }
 
