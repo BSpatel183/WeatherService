@@ -25,13 +25,13 @@ namespace WeatherStationService
                 }
 
                 // Check if the rate limit has been exceeded
-                bool retryAfter = CanRequest(apiKey);
-                if (!retryAfter)
+                DateTime? retryAfter = CanRequest(apiKey);
+                if (retryAfter != null)
                 {
-                    return "Rate limit exceeded.";
+                    return $"Rate limit exceeded. You can retry after {retryAfter} UTC.";
                 }
-                // Call OpenWeatherMap API
-                var client = new RestClient("https://api.openweathermap.org");
+                    // Call OpenWeatherMap API
+                    var client = new RestClient("https://api.openweathermap.org");
                 var request = new RestRequest("data/2.5/weather")
                     .AddParameter("q", $"{city},{country}")
                     .AddParameter("appid", "8b7535b42fe1c551f18028f64e8688f7");  // OpenWeatherMap API key
@@ -60,7 +60,7 @@ namespace WeatherStationService
             }
         }
 
-        private bool CanRequest(string apiKey)
+        private DateTime? CanRequest(string apiKey)
         {
             var now = DateTime.UtcNow;
             // Get the current count and the first request time for this API key
@@ -70,17 +70,19 @@ namespace WeatherStationService
             {
                 // Reset the count and first request time after an hour has passed
                 _requestCounts[apiKey] = (1, now);
-                return true;
+                return null;
             }
 
             if (count >= _maxRequestsPerHour)
             {
-                return false;
+                // Calculate when the user can retry after reaching the rate limit
+                DateTime retryAfter = firstRequestTime.AddHours(1);
+                return retryAfter;
             }
 
             // Increment the request count
             _requestCounts[apiKey] = (count + 1, firstRequestTime);
-            return true;
+            return null;
         }
     }
 }

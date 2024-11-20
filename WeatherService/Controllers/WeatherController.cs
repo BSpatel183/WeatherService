@@ -31,7 +31,7 @@ public class WeatherController : ControllerBase
             }
             else if (result.Contains("Rate limit exceeded."))
             {
-                return StatusCode(429, "Rate limit exceeded. You can retry later.");
+                return StatusCode(429, result);
             }
             else
             {
