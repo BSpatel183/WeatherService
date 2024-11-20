@@ -53,6 +53,20 @@ dotnet run
 http://localhost:5034/swagger/index.html
 ```
 
+## Step to Test Project
+1. Navigate to the project directory:
+```
+cd WeatherService.tests
+```
+2. Build the project:
+```
+dotnet build
+```
+3. Run the test project:
+```
+dotnet test
+```
+
 ## API Endpoints
 
 ### `/api/weather`
