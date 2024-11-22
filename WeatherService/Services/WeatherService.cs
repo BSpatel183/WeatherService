@@ -8,11 +8,14 @@ namespace WeatherStationService
     public class WeatherService
     {
         private readonly string[] _apiKeys;
+        private readonly string _openWeatherMapApiKey;
         private readonly int _maxRequestsPerHour;
         private static readonly ConcurrentDictionary<string, (int Count, DateTime FirstRequestTime)> _requestCounts = new ConcurrentDictionary<string, (int, DateTime)>();
+
         public WeatherService(IConfiguration configuration)
         {
             _apiKeys = configuration.GetSection("ApiKeys").Get<string[]>();
+            _openWeatherMapApiKey = configuration.GetSection("OpenWeatherMapApiKey").Get<string>();
             _maxRequestsPerHour = configuration.GetValue<int>("RateLimit:MaxRequestsPerHour");
         }
         public async Task<GetWeatherResponse> GetWeatherAsync(string city, string country, string apiKey)
@@ -20,6 +23,12 @@ namespace WeatherStationService
             var weather_response = new GetWeatherResponse();
             try
             {
+                if (string.IsNullOrWhiteSpace(_openWeatherMapApiKey))
+                {
+                    weather_response.Description = $"Open Weather API key not configured.";
+                    return weather_response;
+                }
+
                 // Check if the API key is valid
                 if (!_apiKeys.Contains(apiKey))
                 {
@@ -28,7 +37,7 @@ namespace WeatherStationService
                 }
 
                 // Check if the rate limit has been exceeded
-                DateTime? retryAfter = CanRequest(apiKey);
+                DateTime? retryAfter = await CanRequestAsync(apiKey, DateTime.UtcNow);
                 if (retryAfter != null)
                 {
                     weather_response.Description = $"Rate limit exceeded. You can retry after {retryAfter} UTC.";
@@ -38,7 +47,7 @@ namespace WeatherStationService
                 var client = new RestClient("https://api.openweathermap.org");
                 var request = new RestRequest("data/2.5/weather")
                     .AddParameter("q", $"{city},{country}")
-                    .AddParameter("appid", "8b7535b42fe1c551f18028f64e8688f7");  // OpenWeatherMap API key
+                    .AddParameter("appid", _openWeatherMapApiKey);  // OpenWeatherMap API key
 
                 var response = await client.ExecuteGetAsync(request);
                 Console.WriteLine(DateTime.UtcNow);
@@ -52,11 +61,11 @@ namespace WeatherStationService
                     weather_response.Description = $"{description}" ?? "No weather description available.";
                     return weather_response;
                 }
-                else 
+                else
                 {
                     var ErrorMessage = json.SelectToken("message")?.ToString();
                     weather_response.Description = $"Failed : {ErrorMessage}" ?? "Failed to fetch weather data.";
-                    return weather_response ;
+                    return weather_response;
                 }
 
             }
@@ -74,9 +83,8 @@ namespace WeatherStationService
             }
         }
 
-        private DateTime? CanRequest(string apiKey)
+        public async Task<DateTime?> CanRequestAsync(string apiKey, DateTime now)
         {
-            var now = DateTime.UtcNow;
             // Get the current count and the first request time for this API key
             var (count, firstRequestTime) = _requestCounts.GetOrAdd(apiKey, (0, now));
 
