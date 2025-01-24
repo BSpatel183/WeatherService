@@ -17,9 +17,9 @@ public class WeatherServiceTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(initialData: inMemorySettings)
             .Build();
-
+        var httpClient = new HttpClient();
         // Instantiate WeatherService with the actual configuration
-        _weatherService = new WeatherStationService.WeatherService(configuration);
+        _weatherService = new WeatherStationService.WeatherService(configuration, httpClient);
     }
 
     [Fact]

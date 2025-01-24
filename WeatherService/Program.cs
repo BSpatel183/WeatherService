@@ -1,7 +1,8 @@
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddSingleton<WeatherStationService.WeatherService>();  // Your weather service
+builder.Services.AddHttpClient<WeatherStationService.WeatherService>();
+builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
 
 builder.Configuration.AddEnvironmentVariables();
 builder.Services.AddControllers();

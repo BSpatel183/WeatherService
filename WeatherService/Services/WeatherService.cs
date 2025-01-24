@@ -1,5 +1,6 @@
-using Newtonsoft.Json.Linq;
-using RestSharp;
+using System.Net.Http;
+using System.Text.Json;
+using System.Threading.Tasks;
 using System.Collections.Concurrent;
 using WeatherService.Models;
 
@@ -7,13 +8,15 @@ namespace WeatherStationService
 {
     public class WeatherService
     {
+        private readonly HttpClient _httpClient;
         private readonly string[] _apiKeys;
         private readonly string _openWeatherMapApiKey;
         private readonly int _maxRequestsPerHour;
         private static readonly ConcurrentDictionary<string, (int Count, DateTime FirstRequestTime)> _requestCounts = new ConcurrentDictionary<string, (int, DateTime)>();
 
-        public WeatherService(IConfiguration configuration)
+        public WeatherService(IConfiguration configuration, HttpClient httpClient)
         {
+            _httpClient = httpClient;
             _apiKeys = configuration.GetSection("ApiKeys").Get<string[]>();
             _openWeatherMapApiKey = configuration.GetSection("OpenWeatherMapApiKey").Get<string>();
             _maxRequestsPerHour = configuration.GetValue<int>("RateLimit:MaxRequestsPerHour");
@@ -43,33 +46,54 @@ namespace WeatherStationService
                     weather_response.Description = $"Rate limit exceeded. You can retry after {retryAfter} UTC.";
                     return weather_response;
                 }
-                // Call OpenWeatherMap API
-                var client = new RestClient("https://api.openweathermap.org");
-                var request = new RestRequest("data/2.5/weather")
-                    .AddParameter("q", $"{city},{country}")
-                    .AddParameter("appid", _openWeatherMapApiKey);  // OpenWeatherMap API key
+                // Construct the request URL
+                var requestUrl = $"https://api.openweathermap.org/data/2.5/weather?q={city},{country}&appid=8b7535b42fe1c551f18028f64e8688f7";
 
-                var response = await client.ExecuteGetAsync(request);
-                Console.WriteLine(DateTime.UtcNow);
-                var json = JObject.Parse(response.Content);
+                // Send the request using HttpClient
+                var response = await _httpClient.GetAsync(requestUrl);
 
-                if (response.IsSuccessful)
+                if (response.IsSuccessStatusCode)
                 {
-                    var description = json.SelectToken("weather[0].description")?.ToString();
-                    var iconID = json.SelectToken("weather[0].icon")?.ToString();
-                    weather_response.IconId = iconID;
-                    weather_response.Description = $"{description}" ?? "No weather description available.";
+                    var content = await response.Content.ReadAsStringAsync();
+
+                    // Parse the JSON response
+                    using var jsonDoc = JsonDocument.Parse(content);
+                    var root = jsonDoc.RootElement;
+
+                    // Extract data
+                    var weatherArray = root.GetProperty("weather");
+                    if (weatherArray.GetArrayLength() > 0)
+                    {
+                        var description = weatherArray[0].GetProperty("description").GetString();
+                        var iconID = weatherArray[0].GetProperty("icon").GetString();
+
+                        weather_response.Description = description ?? "No weather description available.";
+                        weather_response.IconId = iconID;
+                    }
+                    else
+                    {
+                        weather_response.Description = "Weather data not found.";
+                    }
+
                     return weather_response;
                 }
                 else
                 {
-                    var ErrorMessage = json.SelectToken("message")?.ToString();
-                    weather_response.Description = $"Failed : {ErrorMessage}" ?? "Failed to fetch weather data.";
+                    var content = await response.Content.ReadAsStringAsync();
+
+                    // Handle error response
+                    using var jsonDoc = JsonDocument.Parse(content);
+                    var root = jsonDoc.RootElement;
+
+                    var errorMessage = root.TryGetProperty("message", out var messageElement)
+                        ? messageElement.GetString()
+                        : "Unknown error occurred.";
+
+                    weather_response.Description = $"Failed : {errorMessage}";
                     return weather_response;
                 }
-
             }
-            catch (Newtonsoft.Json.JsonReaderException ex)
+            catch (JsonException ex)
             {
                 // Handle JSON parsing errors (e.g., if OpenWeatherMap returns malformed JSON)
                 weather_response.Description = $"Error parsing the weather data: {ex.Message}. Please try again later.";
